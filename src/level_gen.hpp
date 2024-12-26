@@ -13,4 +13,20 @@ void createPersistentEntities(Engine &ctx);
 // generates a new play area.
 void generateWorld(Engine &ctx);
 
+
+
+
+//
+using madrona::Entity;
+using madrona::CountT; 
+
+void generate_switch(Engine &ctx, CountT k_ary);
+
+void generate_in_port(Engine &ctx, CountT k_ary);
+
+void generate_e_port(Engine &ctx, CountT k_ary);
+
+void generate_host(Engine &ctx, CountT k_ary);
+
+//
 }

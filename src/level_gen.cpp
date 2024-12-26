@@ -1,5 +1,11 @@
 #include "level_gen.hpp"
 
+//
+#include "sim.hpp"
+#include "2_fib_nexthop_init_mflow.hpp"
+#include "2_flow_mflow.hpp"
+//
+
 namespace madEscape {
 
 using namespace madrona;
@@ -150,7 +156,8 @@ void createPersistentEntities(Engine &ctx)
     // Create agent entities. Note that this leaves a lot of components
     // uninitialized, these will be set during world generation, which is
     // called for every episode.
-    for (CountT i = 0; i < consts::numAgents; ++i) {
+    // for (CountT i = 0; i < consts::numAgents; ++i) {
+    for (CountT i = 0; i < 1; ++i) {
         Entity agent = ctx.data().agents[i] =
             ctx.makeRenderableEntity<Agent>();
 
@@ -167,11 +174,15 @@ void createPersistentEntities(Engine &ctx)
         ctx.get<ResponseType>(agent) = ResponseType::Dynamic;
         ctx.get<GrabState>(agent).constraintEntity = Entity::none();
         ctx.get<EntityType>(agent) = EntityType::Agent;
+
+        ctx.get<CurStep>(agent).step = 0;
+
     }
 
     // Populate OtherAgents component, which maintains a reference to the
     // other agents in the world for each agent.
-    for (CountT i = 0; i < consts::numAgents; i++) {
+    // for (CountT i = 0; i < consts::numAgents; i++) {
+    for (CountT i = 0; i < 1; ++i) {
         Entity cur_agent = ctx.data().agents[i];
 
         OtherAgents &other_agents = ctx.get<OtherAgents>(cur_agent);
@@ -185,6 +196,10 @@ void createPersistentEntities(Engine &ctx)
             other_agents.e[out_idx++] = other_agent;
         }
     }
+
+
+
+
 }
 
 // Although agents and walls persist between episodes, we still need to
@@ -631,5 +646,412 @@ void generateWorld(Engine &ctx)
     resetPersistentEntities(ctx);
     generateLevel(ctx);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void generate_switch(Engine &ctx, CountT k_ary)
+{
+    CountT num_edge_switch = k_ary*k_ary/2;
+    CountT num_aggr_switch = k_ary*k_ary/2; // the number of aggragate switch
+    CountT num_core_switch = k_ary*k_ary/4;
+
+    CountT num_host = k_ary*k_ary*k_ary/4;
+    CountT num_next_hop = k_ary;
+
+    printf("*******generate_switch*******\n");
+    // build edge switch
+    for (uint32_t i = 0; i < num_edge_switch; i++) {
+        Entity e_switch = ctx.makeEntity<Switch>();
+        printf("");
+        ctx.get<SwitchType>(e_switch) = SwitchType::Edge;
+        ctx.get<SwitchID>(e_switch).switch_id = i;
+
+        for (uint32_t j = 0; j < num_host; j++) {
+            for (uint32_t k = 0; k < num_next_hop; k++) {
+                ctx.get<FIBTable>(e_switch).fib_table[j][k] = central_fib_table[i][j][k];
+            }
+        }
+        
+        ctx.get<QueueNumPerPort>(e_switch).queue_num_per_port = QUEUE_NUM;
+
+        ctx.data()._switches[ctx.data().numSwitch++] = e_switch;
+    }
+
+    // build aggragate switch
+    for (uint32_t i = 0; i < num_aggr_switch; i++) {
+        Entity e_switch = ctx.makeEntity<Switch>();
+        ctx.get<SwitchType>(e_switch) = SwitchType::Aggr;
+        ctx.get<SwitchID>(e_switch).switch_id = i+num_edge_switch;
+
+        for (uint32_t j = 0; j < num_host; j++) {
+            for (uint32_t k = 0; k < num_next_hop; k++) {
+                ctx.get<FIBTable>(e_switch).fib_table[j][k] = central_fib_table[i+num_edge_switch][j][k];
+            }
+        }
+
+        ctx.get<QueueNumPerPort>(e_switch).queue_num_per_port = QUEUE_NUM;
+
+        ctx.data()._switches[ctx.data().numSwitch++] = e_switch;
+    }
+
+    // build core switch
+    for (uint32_t i = 0; i < num_core_switch; i++) {
+        Entity e_switch = ctx.makeEntity<Switch>();
+        ctx.get<SwitchType>(e_switch) = SwitchType::Core;
+        ctx.get<SwitchID>(e_switch).switch_id = i + num_edge_switch + num_aggr_switch;
+
+        for (uint32_t j = 0; j < num_host; j++) {
+            for (uint32_t k = 0; k < num_next_hop; k++) {
+                ctx.get<FIBTable>(e_switch).fib_table[j][k] = central_fib_table[i+num_edge_switch+num_aggr_switch][j][k];
+            }
+        }
+
+        ctx.get<QueueNumPerPort>(e_switch).queue_num_per_port = QUEUE_NUM;
+        
+        ctx.data()._switches[ctx.data().numSwitch++] = e_switch;
+    }
+    //printf("\n");
+    printf("Total %d switches, %d in_ports, %d e_ports\n", \
+           ctx.data().numSwitch, ctx.data().numInPort, ctx.data().numEPort);
+}
+
+
+void generate_in_port(Engine &ctx, CountT k_ary)
+{
+    CountT num_edge_switch = k_ary*k_ary/2;
+    CountT num_aggr_switch = k_ary*k_ary/2; // the number of aggragate switch
+    CountT num_core_switch = k_ary*k_ary/4;
+
+    printf("*******Generate in ports*******\n");
+    // ingress_ports for edge switch
+    ctx.data().numInPort = 0;
+    for (uint32_t i = 0; i < num_edge_switch; i++) {
+        for (uint32_t j = 0; j < k_ary; j++) {
+            Entity in_port = ctx.makeEntity<IngressPort>();
+            ctx.get<PortType>(in_port) = PortType::InPort;
+            ctx.get<LocalPortID>(in_port).local_port_id = j;
+            ctx.get<GlobalPortID>(in_port).global_port_id = i*k_ary+j;
+
+            ctx.get<PktBuf>(in_port).head = 0;
+            ctx.get<PktBuf>(in_port).tail = 0;
+            ctx.get<PktBuf>(in_port).cur_num = 0;
+            ctx.get<PktBuf>(in_port).cur_bytes = 0;
+
+            ctx.get<SwitchID>(in_port).switch_id = i;
+            
+            ctx.get<SimTime>(in_port).sim_time = 0;
+            ctx.get<SimTimePerUpdate>(in_port).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+
+            ctx.data().inPorts[ctx.data().numInPort++] = in_port;
+        }
+    }
+
+    // ingress_ports for aggragate switch
+    for (uint32_t i = 0; i < num_aggr_switch; i++) {
+        for (uint32_t j = 0; j < k_ary; j++) {
+            Entity in_port = ctx.makeEntity<IngressPort>();
+            ctx.get<PortType>(in_port) = PortType::InPort;
+            ctx.get<LocalPortID>(in_port).local_port_id = j;
+            ctx.get<GlobalPortID>(in_port).global_port_id = (num_edge_switch+i)*k_ary+j;
+
+            ctx.get<PktBuf>(in_port).head = 0;
+            ctx.get<PktBuf>(in_port).tail = 0;
+            ctx.get<PktBuf>(in_port).cur_num = 0;
+            ctx.get<PktBuf>(in_port).cur_bytes = 0;
+
+            ctx.get<SwitchID>(in_port).switch_id = i + num_edge_switch;
+
+            // printf("switch_id: %d, local_port_id: %d, global_port_id: %d\n", \
+            //         ctx.get<SwitchID>(in_port).switch_id, ctx.get<LocalPortID>(in_port).local_port_id, \
+            //         ctx.get<GlobalPortID>(in_port).global_port_id);
+
+            ctx.get<SimTime>(in_port).sim_time = 0;
+            ctx.get<SimTimePerUpdate>(in_port).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+
+            ctx.data().inPorts[ctx.data().numInPort++] = in_port;
+        }
+    }
+
+    // ingress_ports for core switch
+    for (uint32_t i = 0; i < num_core_switch; i++) {
+        for (uint32_t j = 0; j < k_ary; j++) {
+            Entity in_port = ctx.makeEntity<IngressPort>();
+            ctx.get<PortType>(in_port) = PortType::InPort;
+            ctx.get<LocalPortID>(in_port).local_port_id = j;
+            ctx.get<GlobalPortID>(in_port).global_port_id = (num_edge_switch+num_aggr_switch+i)*k_ary+j;
+
+            ctx.get<PktBuf>(in_port).head = 0;
+            ctx.get<PktBuf>(in_port).tail = 0;
+            ctx.get<PktBuf>(in_port).cur_num = 0;
+            ctx.get<PktBuf>(in_port).cur_bytes = 0;
+
+            ctx.get<SwitchID>(in_port).switch_id = i + num_edge_switch + num_aggr_switch;
+
+            ctx.get<SimTime>(in_port).sim_time = 0;
+            ctx.get<SimTimePerUpdate>(in_port).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+
+            ctx.data().inPorts[ctx.data().numInPort++] = in_port;
+        }
+    }
+
+    printf("Total %d switches, %d in_ports, %d e_ports\n", \
+           ctx.data().numSwitch, ctx.data().numInPort, ctx.data().numEPort);
+}
+
+
+void generate_e_port(Engine &ctx, CountT k_ary)
+{
+    CountT num_edge_switch = k_ary*k_ary/2;
+    CountT num_aggr_switch = k_ary*k_ary/2; // the number of aggragate switch
+    CountT num_core_switch = k_ary*k_ary/4;
+
+    printf("*******Generate egress ports*******\n");
+    // egress_ports for edge switch
+
+    ctx.data().numEPort = 0;
+    for (uint32_t i = 0; i < num_edge_switch; i++) {
+        for (uint32_t j = 0; j < k_ary; j++) {
+            Entity e_port = ctx.makeEntity<EgressPort>();
+            ctx.get<SchedTrajType>(e_port) = SchedTrajType::SP;
+            ctx.get<PortType>(e_port) = PortType::EPort;
+            ctx.get<LocalPortID>(e_port).local_port_id = j;
+            ctx.get<GlobalPortID>(e_port).global_port_id = i*k_ary+j; //i*k_ary+j;
+
+            //pfc
+            for (uint32_t k = 0; k < QUEUE_NUM; k++) {
+                ctx.get<PktQueue>(e_port).pkt_buf[k].head = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].tail = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].cur_num = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].cur_bytes = 0;
+
+                ctx.get<PktQueue>(e_port).queue_pfc_state[k] = PFCState::RESUME;
+            }
+
+            ctx.get<TXHistory>(e_port).head = 0;
+            ctx.get<TXHistory>(e_port).tail = 0;
+            ctx.get<TXHistory>(e_port).cur_num = 0;
+            ctx.get<TXHistory>(e_port).cur_bytes = 0;
+
+            ctx.get<SwitchID>(e_port).switch_id = i;
+
+            if(j < k_ary/2) 
+                ctx.get<NextHopType>(e_port) = NextHopType::HOST;
+            else
+                ctx.get<NextHopType>(e_port) = NextHopType::SWITCH;
+
+            uint32_t ett_idx = ctx.data().numEPort;
+            ctx.get<NextHop>(e_port).next_hop = next_hop_table[ett_idx]; // next_hop_table also include mapping  switch to host nic
+
+            ctx.get<LinkRate>(e_port).link_rate = 1000LL*1000*1000*100;
+            ctx.get<SSLinkDelay>(e_port).SS_link_delay = SS_LINK_DELAY;
+
+            ctx.get<SimTime>(e_port).sim_time = 0;
+            ctx.get<SimTimePerUpdate>(e_port).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+
+            ctx.get<Seed>(e_port).seed = i+1;
+
+            ctx.data().ePorts[ctx.data().numEPort++] = e_port;
+        }
+    }
+
+    // egress_ports for aggragate switch
+    for (uint32_t i = 0; i < num_aggr_switch; i++) {
+        for (uint32_t j = 0; j < k_ary; j++) {
+            Entity e_port = ctx.makeEntity<EgressPort>();
+            ctx.get<SchedTrajType>(e_port) = SchedTrajType::SP;
+            ctx.get<PortType>(e_port) = PortType::EPort;
+            ctx.get<LocalPortID>(e_port).local_port_id = j; //i*k_ary+j;
+            ctx.get<GlobalPortID>(e_port).global_port_id = (i+num_edge_switch)*k_ary+j;
+
+            //pfc
+            for (uint32_t k = 0; k < QUEUE_NUM; k++) {
+                ctx.get<PktQueue>(e_port).pkt_buf[k].head = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].tail = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].cur_num = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].cur_bytes = 0;
+
+                ctx.get<PktQueue>(e_port).queue_pfc_state[k] = PFCState::RESUME; 
+            }
+
+            ctx.get<TXHistory>(e_port).head = 0;
+            ctx.get<TXHistory>(e_port).tail = 0;
+            ctx.get<TXHistory>(e_port).cur_num = 0;
+            ctx.get<TXHistory>(e_port).cur_bytes = 0;
+
+            ctx.get<SwitchID>(e_port).switch_id = i + num_edge_switch;
+
+            ctx.get<NextHopType>(e_port) = NextHopType::SWITCH;
+
+            uint32_t ett_idx = ctx.data().numEPort;
+            ctx.get<NextHop>(e_port).next_hop = next_hop_table[ett_idx];
+
+            ctx.get<LinkRate>(e_port).link_rate = 1000LL*1000*1000*100;
+            ctx.get<SSLinkDelay>(e_port).SS_link_delay = SS_LINK_DELAY;
+
+            ctx.get<SimTime>(e_port).sim_time = 0;
+            ctx.get<SimTimePerUpdate>(e_port).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+
+            ctx.get<Seed>(e_port).seed = i+1;
+
+            ctx.data().ePorts[ctx.data().numEPort++] = e_port;
+        }
+    }
+
+    // egress_ports for core switch
+    for (uint32_t i = 0; i < num_core_switch; i++) {
+        for (uint32_t j = 0; j < k_ary; j++) {
+
+            Entity e_port = ctx.makeEntity<EgressPort>();
+            ctx.get<SchedTrajType>(e_port) = SchedTrajType::SP;
+            ctx.get<PortType>(e_port) = PortType::EPort;
+            ctx.get<LocalPortID>(e_port).local_port_id = j; //i*k_ary+j;
+            ctx.get<GlobalPortID>(e_port).global_port_id = ctx.data().numEPort + (i+num_edge_switch+num_aggr_switch)*k_ary+j;
+
+            //pfc
+            for (uint32_t k = 0; k < QUEUE_NUM; k++) {
+                ctx.get<PktQueue>(e_port).pkt_buf[k].head = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].tail = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].cur_num = 0;
+                ctx.get<PktQueue>(e_port).pkt_buf[k].cur_bytes = 0;
+
+                ctx.get<PktQueue>(e_port).queue_pfc_state[k] = PFCState::RESUME; 
+            }
+
+            ctx.get<TXHistory>(e_port).head = 0;
+            ctx.get<TXHistory>(e_port).tail = 0;
+            ctx.get<TXHistory>(e_port).cur_num = 0;
+            ctx.get<TXHistory>(e_port).cur_bytes = 0;
+
+            ctx.get<SwitchID>(e_port).switch_id = i + num_edge_switch + num_aggr_switch;
+            
+            ctx.get<NextHopType>(e_port) = NextHopType::SWITCH;
+
+            uint32_t ett_idx = ctx.data().numEPort;
+            ctx.get<NextHop>(e_port).next_hop = next_hop_table[ett_idx];
+
+            ctx.get<LinkRate>(e_port).link_rate = 1000LL*1000*1000*100;
+            ctx.get<SSLinkDelay>(e_port).SS_link_delay = SS_LINK_DELAY;
+
+            ctx.get<SimTime>(e_port).sim_time = 0;
+            ctx.get<SimTimePerUpdate>(e_port).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+
+            ctx.get<Seed>(e_port).seed = i+1;
+
+            ctx.data().ePorts[ctx.data().numEPort++] = e_port;
+        }
+    }
+    printf("Total %d switches, %d in_ports, %d e_ports\n", \
+           ctx.data().numSwitch, ctx.data().numInPort, ctx.data().numEPort);
+}
+
+void generate_host(Engine &ctx, CountT k_ary)
+{
+    CountT num_host = k_ary*k_ary*k_ary/4;
+
+    printf("*******Generate NPUs*******\n");
+    //NPUs
+    for (uint32_t i = 0; i < num_host; i++) {
+        Entity npu_e = ctx.makeEntity<NPU>();
+        
+        ctx.get<NPU_ID>(npu_e).npu_id = i;
+        
+        ctx.get<SimTime>(npu_e).sim_time = 0;
+        ctx.get<SimTimePerUpdate>(npu_e).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+
+        ctx.get<SendFlows>(npu_e).head = 0;
+        ctx.get<SendFlows>(npu_e).tail = 0;
+        ctx.get<SendFlows>(npu_e).cur_num = 0;
+
+        ctx.get<CompletedFlowQueue>(npu_e).head = 0;
+        ctx.get<CompletedFlowQueue>(npu_e).tail = 0;
+        ctx.get<CompletedFlowQueue>(npu_e).cur_num = 0;
+
+        ctx.get<NewFlowQueue>(npu_e).head = 0;
+        ctx.get<NewFlowQueue>(npu_e).tail = 0;
+        ctx.get<NewFlowQueue>(npu_e).cur_num = 0;
+
+        ctx.data()._npus[ctx.data().num_npu++] = npu_e;
+    }
+
+    printf("*******Generate NICs*******\n");
+    //nic
+    for (uint32_t i = 0; i < num_host; i++) {
+        // if (i > 3) {
+        //     break;
+        // }
+        // printf("nic: %d\n", i);
+        Entity nic_e = ctx.makeEntity<NIC>();
+        ctx.get<NIC_ID>(nic_e).nic_id = i;
+        // ctx.get<EgressPortID>(nic_e).egress_port_id = i;
+
+        // printf("MountedFlows\n");
+        ctx.get<MountedFlows>(nic_e).head = 0;
+        ctx.get<MountedFlows>(nic_e).tail = 0;
+        ctx.get<MountedFlows>(nic_e).cur_num = 0;
+
+        // printf("BidPktBuf\n");
+        ctx.get<BidPktBuf>(nic_e).snd_buf.head = 0;
+        ctx.get<BidPktBuf>(nic_e).snd_buf.tail = 0;
+        ctx.get<BidPktBuf>(nic_e).snd_buf.cur_num = 0;
+        ctx.get<BidPktBuf>(nic_e).snd_buf.cur_bytes = 0;
+
+        ctx.get<BidPktBuf>(nic_e).recv_buf.head = 0;
+        ctx.get<BidPktBuf>(nic_e).recv_buf.tail = 0;
+        ctx.get<BidPktBuf>(nic_e).recv_buf.cur_num = 0;
+        ctx.get<BidPktBuf>(nic_e).recv_buf.cur_bytes = 0;
+
+        // printf("TXHistory\n");
+        ctx.get<TXHistory>(nic_e).head = 0;
+        ctx.get<TXHistory>(nic_e).tail = 0;
+        ctx.get<TXHistory>(nic_e).cur_num = 0;
+        ctx.get<TXHistory>(nic_e).cur_bytes = 0;
+
+        // printf("NextHopType\n");
+        ctx.get<NextHopType>(nic_e) = NextHopType::SWITCH;
+
+        // printf("HSLinkDelay\n");
+        ctx.get<HSLinkDelay>(nic_e).HS_link_delay = HS_LINK_DELAY; // 1 us, 1000 ns 
+        // printf("NICRate\n");       
+        ctx.get<NICRate>(nic_e).nic_rate = 1000LL*1000*1000*100; // 100 Gbps 
+        // printf("ett_idx\n");  
+        uint32_t ett_idx = ctx.data().num_nic;
+        // printf("NextHop\n");
+        ctx.get<NextHop>(nic_e).next_hop = next_hop_table_host_to_sw[ett_idx];
+        // printf("SimTime\n");
+        ctx.get<SimTime>(nic_e).sim_time = 0;
+
+        ctx.get<Seed>(nic_e).seed = i;
+        ctx.get<SimTimePerUpdate>(nic_e).sim_time_per_update = LOOKAHEAD_TIME; //1000ns
+        
+        ctx.data()._nics[ctx.data().num_nic++] = nic_e;
+    }
+
+
+    memset(ctx.data().flow_count, 0, MAX_PATH_LEN*sizeof(uint32_t));
+    // ctx.data().flow_count = 
+
+    // printf("Total %d switches, %d in_ports, %d e_ports, %d send_flows, %d recv_flows\n", \
+    //        ctx.data().numSwitch, ctx.data().numInPort, ctx.data().numEPort, ctx.data().num_snd_flow, ctx.data().num_recv_flow);
+    
+    printf("Total %d switches, %d in_ports, %d e_ports, %d npus\n", \
+           ctx.data().numSwitch, ctx.data().numInPort, ctx.data().numEPort, ctx.data().num_npu);
+}
+
+
 
 }

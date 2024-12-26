@@ -1,5 +1,7 @@
 import torch
 import madrona_escape_room
+import time
+import numpy as np
 
 from madrona_escape_room_learn import (
     train, profile, TrainConfig, PPOConfig, SimInterface,
@@ -11,7 +13,7 @@ import argparse
 import math
 from pathlib import Path
 import warnings
-warnings.filterwarnings("error")
+# warnings.filterwarnings("error")
 
 torch.manual_seed(0)
 
@@ -72,7 +74,7 @@ class LearningCallback:
 
 
 arg_parser = argparse.ArgumentParser()
-arg_parser.add_argument('--gpu-id', type=int, default=0)
+arg_parser.add_argument('--gpu-id', type=int, default=1)
 arg_parser.add_argument('--ckpt-dir', type=str, required=True)
 arg_parser.add_argument('--restore', type=int)
 
@@ -94,7 +96,38 @@ arg_parser.add_argument('--fp16', action='store_true')
 arg_parser.add_argument('--gpu-sim', action='store_true')
 arg_parser.add_argument('--profile-report', action='store_true')
 
+
+# arg_parser.add_argument('--enable_gpu_sim', type=str, required=True, help='Enable GPU simulation (e.g., "cpu" or "gpu")')
+arg_parser.add_argument('--gpu_id', type=int, required=True, help='GPU ID')
+arg_parser.add_argument('--fattree_K', type=int, required=True, help='Fattree K value')
+arg_parser.add_argument('--cc_method', type=int, required=True, help='Congestion control method')
+
 args = arg_parser.parse_args()
+
+# print
+# print(f"Number of environments: {args.num_env}")
+# print(f"Enable GPU simulation: {args.enable_gpu_sim}")
+print(f"gpu id id: {args.gpu_id}")
+print(f"Fattree K: {args.fattree_K}")
+print(f"CC Method: {args.cc_method}")
+
+
+class AJLink:
+    def __init__(self):
+        # 使用NumPy数组来定义一个二维数组，大小为 (100000, 5)
+        self.aj_link = np.zeros((100000, 5), dtype=np.uint32)
+        self.link_num = 0
+        self.npu_num = 0
+
+
+# 示例用法
+aj_link_instance = AJLink()
+aj_link_instance.link_num = 10
+aj_link_instance.npu_num = 2
+
+# 设置某个链接的值
+aj_link_instance.aj_link[0] = [1, 2, 1, 2, 3]
+
 
 sim = madrona_escape_room.SimManager(
     exec_mode = madrona_escape_room.madrona.ExecMode.CUDA if args.gpu_sim else madrona_escape_room.madrona.ExecMode.CPU,
@@ -102,6 +135,11 @@ sim = madrona_escape_room.SimManager(
     num_worlds = args.num_worlds,
     rand_seed = 5,
     auto_reset = True,
+    #
+    k_aray = args.fattree_K,
+    cc_method = args.cc_method,
+    # aj_link = aj_link_instance,
+    #
 )
 
 ckpt_dir = Path(args.ckpt_dir)
@@ -132,35 +170,45 @@ if args.restore:
 else:
     restore_ckpt = None
 
-train(
-    dev,
-    SimInterface(
-            step = lambda: sim.step(),
-            obs = obs,
-            actions = actions,
-            dones = dones,
-            rewards = rewards,
-    ),
-    TrainConfig(
-        num_updates = args.num_updates,
-        steps_per_update = args.steps_per_update,
-        num_bptt_chunks = args.num_bptt_chunks,
-        lr = args.lr,
-        gamma = args.gamma,
-        gae_lambda = 0.95,
-        ppo = PPOConfig(
-            num_mini_batches=1,
-            clip_coef=0.2,
-            value_loss_coef=args.value_loss_coef,
-            entropy_coef=args.entropy_loss_coef,
-            max_grad_norm=0.5,
-            num_epochs=2,
-            clip_value_loss=args.clip_value_loss,
-        ),
-        value_normalizer_decay = 0.999,
-        mixed_precision = args.fp16,
-    ),
-    policy,
-    learning_cb,
-    restore_ckpt
-)
+
+start = time.time()
+for i in range(args.num_updates):
+    print("----", i, "-th frame----")
+    sim.step()
+
+end = time.time()
+
+print("time: ", (end - start))
+
+# train(
+#     dev,
+#     SimInterface(
+#             step = lambda: sim.step(),
+#             obs = obs,
+#             actions = actions,
+#             dones = dones,
+#             rewards = rewards,
+#     ),
+#     TrainConfig(
+#         num_updates = args.num_updates,
+#         steps_per_update = args.steps_per_update,
+#         num_bptt_chunks = args.num_bptt_chunks,
+#         lr = args.lr,
+#         gamma = args.gamma,
+#         gae_lambda = 0.95,
+#         ppo = PPOConfig(
+#             num_mini_batches=1,
+#             clip_coef=0.2,
+#             value_loss_coef=args.value_loss_coef,
+#             entropy_coef=args.entropy_loss_coef,
+#             max_grad_norm=0.5,
+#             num_epochs=2,
+#             clip_value_loss=args.clip_value_loss,
+#         ),
+#         value_normalizer_decay = 0.999,
+#         mixed_precision = args.fp16,
+#     ),
+#     policy,
+#     learning_cb,
+#     restore_ckpt
+# )
