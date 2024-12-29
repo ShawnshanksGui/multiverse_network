@@ -1,5 +1,8 @@
 #include "mgr.hpp"
-#include "sim.hpp"
+// #include "sim.hpp"
+#include "2_sim_mflow.hpp"
+
+// #include "dcqcn.hpp"
 
 #include <madrona/utils.hpp>
 #include <madrona/importer.hpp>
@@ -15,6 +18,10 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+
+// #include <fstream>
+// #include <sstream>
+
 
 using namespace madrona;
 using namespace madrona::py;
@@ -37,7 +44,7 @@ struct Manager::Impl {
     inline virtual ~Impl() {}
 
     virtual void run() = 0;
-    virtual Tensor exportTensor(ExportID slot, TensorElementType type,
+    virtual Tensor exportTensor(ExportID slot, Tensor::ElementType type,
                                 Span<const int64_t> dims) = 0;
 
     static inline Impl * init(const Config &cfg, const GridState &src_grid);
@@ -56,7 +63,7 @@ struct Manager::CPUImpl final : Manager::Impl {
           cpuExec({
                   .numWorlds = mgr_cfg.numWorlds,
                   .numExportedBuffers = (uint32_t)ExportID::NumExports,
-              }, sim_cfg, world_inits, 1)
+              }, sim_cfg, world_inits)
     {}
 
     inline virtual ~CPUImpl() final {
@@ -67,7 +74,7 @@ struct Manager::CPUImpl final : Manager::Impl {
     inline virtual void run() final { cpuExec.run(); }
     
     inline virtual Tensor exportTensor(ExportID slot,
-                                       TensorElementType type,
+                                       Tensor::ElementType type,
                                        Span<const int64_t> dims) final
     {
         void *dev_ptr = cpuExec.getExported((uint32_t)slot);
@@ -78,10 +85,11 @@ struct Manager::CPUImpl final : Manager::Impl {
 #ifdef MADRONA_CUDA_SUPPORT
 struct Manager::GPUImpl final : Manager::Impl {
     MWCudaExecutor gpuExec;
-    MWCudaLaunchGraph stepGraph;
 
-    inline GPUImpl(CUcontext cu_ctx,
-                   const Manager::Config &mgr_cfg,
+    // added by fei
+    // CUcontext cu_ctx = MWCudaExecutor::initCUDA(cfg.gpuID);
+
+    inline GPUImpl(const Manager::Config &mgr_cfg,
                    const Sim::Config &sim_cfg,
                    EpisodeManager *episode_mgr,
                    GridState *grid_data,
@@ -95,15 +103,21 @@ struct Manager::GPUImpl final : Manager::Impl {
                   .numWorldDataBytes = sizeof(Sim),
                   .worldDataAlignment = alignof(Sim),
                   .numWorlds = mgr_cfg.numWorlds,
-                  .numTaskGraphs = 1,
                   .numExportedBuffers = (uint32_t)ExportID::NumExports, 
+                  // deleted by fei
+                  .gpuID = (uint32_t)mgr_cfg.gpuID,
+                  
               }, {
                   { SIMPLE_SRC_LIST },
                   { SIMPLE_COMPILE_FLAGS },
                   CompileConfig::OptMode::LTO,
-              }, cu_ctx),
-          stepGraph(gpuExec.buildLaunchGraph(0))
-          
+              })
+            //   }, {
+            //       { SIMPLE_SRC_LIST },
+            //       { SIMPLE_COMPILE_FLAGS },
+            //       CompileConfig::OptMode::LTO,
+            //   }, cu_ctx)
+
     {}
 
     inline virtual ~GPUImpl() final {
@@ -111,9 +125,9 @@ struct Manager::GPUImpl final : Manager::Impl {
         REQ_CUDA(cudaFree(gridData));
     }
 
-    inline virtual void run() final { gpuExec.run(stepGraph); }
+    inline virtual void run() final { gpuExec.run(); }
     
-    virtual inline Tensor exportTensor(ExportID slot, TensorElementType type,
+    virtual inline Tensor exportTensor(ExportID slot, Tensor::ElementType type,
                                        Span<const int64_t> dims) final
     {
         void *dev_ptr = gpuExec.getExported((uint32_t)slot);
@@ -146,6 +160,8 @@ Manager::Impl * Manager::Impl::init(const Config &cfg,
     Sim::Config sim_cfg {
         .maxEpisodeLength = cfg.maxEpisodeLength,
         .enableViewer = false,
+        .kAray = cfg.kAray,  // fei add in 20241202
+        .ccMethod = cfg.ccMethod,  // fei add in 20241202
     };
 
     switch (cfg.execMode) {
@@ -180,8 +196,8 @@ Manager::Impl * Manager::Impl::init(const Config &cfg,
 #ifndef MADRONA_CUDA_SUPPORT
         FATAL("CUDA support not compiled in!");
 #else
-        CUcontext cu_ctx = MWCudaExecutor::initCUDA(cfg.gpuID);
 
+        //
         EpisodeManager *episode_mgr = 
             (EpisodeManager *)cu::allocGPU(sizeof(EpisodeManager));
         // Set the current episode count to 0
@@ -212,7 +228,7 @@ Manager::Impl * Manager::Impl::init(const Config &cfg,
         HeapArray<WorldInit> world_inits = setupWorldInitData(cfg.numWorlds,
             episode_mgr, gpu_grid);
 
-        return new GPUImpl(cu_ctx, cfg, sim_cfg, episode_mgr, gpu_grid,
+        return new GPUImpl(cfg, sim_cfg, episode_mgr, gpu_grid,
                            world_inits.data());
 #endif
     } break;
@@ -234,32 +250,70 @@ void Manager::step()
 
 Tensor Manager::resetTensor() const
 {
-    return impl_->exportTensor(ExportID::Reset, TensorElementType::Int32,
+    return impl_->exportTensor(ExportID::Reset, Tensor::ElementType::Int32,
                                {impl_->cfg.numWorlds, 1});
 }
 
 Tensor Manager::actionTensor() const
 {
-    return impl_->exportTensor(ExportID::Action, TensorElementType::Int32,
+    return impl_->exportTensor(ExportID::Action, Tensor::ElementType::Int32,
         {impl_->cfg.numWorlds, 1});
 }
 
 Tensor Manager::observationTensor() const
 {
-    return impl_->exportTensor(ExportID::GridPos, TensorElementType::Int32,
+    return impl_->exportTensor(ExportID::GridPos, Tensor::ElementType::Int32,
         {impl_->cfg.numWorlds, 2});
 }
 
 Tensor Manager::rewardTensor() const
 {
-    return impl_->exportTensor(ExportID::Reward, TensorElementType::Float32,
+    return impl_->exportTensor(ExportID::Reward, Tensor::ElementType::Float32,
         {impl_->cfg.numWorlds, 1});
 }
 
 Tensor Manager::doneTensor() const
 {
-    return impl_->exportTensor(ExportID::Done, TensorElementType::Float32,
+    return impl_->exportTensor(ExportID::Done, Tensor::ElementType::Float32,
         {impl_->cfg.numWorlds, 1});
 }
+
+Tensor Manager::resultsTensor() const
+{
+    return impl_->exportTensor(ExportID::Results, Tensor::ElementType::Int32,
+        {impl_->cfg.numWorlds, 1});
+}
+
+Tensor Manager::results2Tensor() const
+{
+    return impl_->exportTensor(ExportID::Results2, Tensor::ElementType::Int32,
+        {impl_->cfg.numWorlds, 1000});
+}
+
+Tensor Manager::madronaEventsTensor() const
+{
+    return impl_->exportTensor(ExportID::MadronaEvents, Tensor::ElementType::Int32,
+        {impl_->cfg.numWorlds, 100000});
+}
+
+Tensor Manager::madronaEventsResultTensor() const
+{
+    return impl_->exportTensor(ExportID::MadronaEventsResult, Tensor::ElementType::Int32,
+        {impl_->cfg.numWorlds, 100000});
+}
+
+
+Tensor Manager::simulationTimeTensor() const
+{
+    return impl_->exportTensor(ExportID::SimulationTime, Tensor::ElementType::Int64,
+        {impl_->cfg.numWorlds, 1});
+}
+
+Tensor Manager::processParamsTensor() const
+{
+    return impl_->exportTensor(ExportID::ProcessParams, Tensor::ElementType::Int32,
+        {impl_->cfg.numWorlds, 1000});
+}
+
 
 }
