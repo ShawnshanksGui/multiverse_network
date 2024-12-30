@@ -1,6 +1,6 @@
-# Multiverse network
+# Multiverse Network Simulator
 
-GPU Accelerated Network DES
+GPU Accelerated Network Discrete-event Simulator
 
 # How to use this repository
 
