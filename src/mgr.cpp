@@ -1,5 +1,31 @@
+// #include "mgr.hpp"
+// // #include "sim.hpp"
+// #include "2_sim_mflow.hpp"
+
+// // #include "dcqcn.hpp"
+
+// #include <madrona/utils.hpp>
+// #include <madrona/importer.hpp>
+// #include <madrona/mw_cpu.hpp>
+
+// #ifdef MADRONA_CUDA_SUPPORT
+// #include <madrona/mw_gpu.hpp>
+// #include <madrona/cuda_utils.hpp>
+// #endif
+
+// #include <charconv>
+// #include <iostream>
+// #include <filesystem>
+// #include <fstream>
+// #include <string>
+
+
+// using namespace madrona;
+// using namespace madrona::py;
+
+
 #include "mgr.hpp"
-#include "sim.hpp"
+#include "2_sim_mflow.hpp"
 
 #include <madrona/utils.hpp>
 #include <madrona/importer.hpp>
@@ -18,6 +44,12 @@
 
 using namespace madrona;
 using namespace madrona::py;
+
+
+
+
+
+
 
 namespace madsimple {
 
@@ -261,5 +293,48 @@ Tensor Manager::doneTensor() const
     return impl_->exportTensor(ExportID::Done, TensorElementType::Float32,
         {impl_->cfg.numWorlds, 1});
 }
+
+
+
+
+
+Tensor Manager::resultsTensor() const
+{
+    return impl_->exportTensor(ExportID::Results, TensorElementType::Int32,
+        {impl_->cfg.numWorlds, 1});
+}
+
+Tensor Manager::results2Tensor() const
+{
+    return impl_->exportTensor(ExportID::Results2, TensorElementType::Int32,
+        {impl_->cfg.numWorlds, 1000});
+}
+
+Tensor Manager::madronaEventsTensor() const
+{
+    return impl_->exportTensor(ExportID::MadronaEvents, TensorElementType::Int32,
+        {impl_->cfg.numWorlds, 100000});
+}
+
+Tensor Manager::madronaEventsResultTensor() const
+{
+    return impl_->exportTensor(ExportID::MadronaEventsResult, TensorElementType::Int32,
+        {impl_->cfg.numWorlds, 100000});
+}
+
+
+Tensor Manager::simulationTimeTensor() const
+{
+    return impl_->exportTensor(ExportID::SimulationTime, TensorElementType::Int64,
+        {impl_->cfg.numWorlds, 1});
+}
+
+Tensor Manager::processParamsTensor() const
+{
+    return impl_->exportTensor(ExportID::ProcessParams, TensorElementType::Int32,
+        {impl_->cfg.numWorlds, 1000});
+}
+
+
 
 }

@@ -14,6 +14,7 @@
 
 namespace madsimple {
 
+
 class Manager {
 public:
     struct Config {
@@ -21,6 +22,8 @@ public:
         madrona::ExecMode execMode;
         uint32_t numWorlds;
         int gpuID;
+        uint32_t kAray; // fei add in 20241202
+        uint32_t ccMethod; // fei add in 20241202
     };
 
     MGR_EXPORT Manager(const Config &cfg, const GridState &src_grid);
@@ -33,6 +36,12 @@ public:
     MGR_EXPORT madrona::py::Tensor observationTensor() const;
     MGR_EXPORT madrona::py::Tensor rewardTensor() const;
     MGR_EXPORT madrona::py::Tensor doneTensor() const;
+    MGR_EXPORT madrona::py::Tensor resultsTensor() const;
+    MGR_EXPORT madrona::py::Tensor results2Tensor() const;
+    MGR_EXPORT madrona::py::Tensor madronaEventsTensor() const;
+    MGR_EXPORT madrona::py::Tensor simulationTimeTensor() const;
+    MGR_EXPORT madrona::py::Tensor madronaEventsResultTensor() const;
+    MGR_EXPORT madrona::py::Tensor processParamsTensor() const;
 
 private:
     struct Impl;

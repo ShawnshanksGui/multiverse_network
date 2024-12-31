@@ -90,7 +90,9 @@ NB_MODULE(_madrona_simple_example_cpp, m) {
                             int64_t max_episode_length,
                             madrona::py::PyExecMode exec_mode,
                             int64_t num_worlds,
-                            int64_t gpu_id) {
+                            int64_t gpu_id, 
+                            uint32_t k_aray,
+                            uint32_t cc_method) {
             int64_t grid_y = (int64_t)walls.shape(0);
             int64_t grid_x = (int64_t)walls.shape(1);
 
@@ -107,6 +109,8 @@ NB_MODULE(_madrona_simple_example_cpp, m) {
                 .execMode = exec_mode,
                 .numWorlds = (uint32_t)num_worlds,
                 .gpuID = (int)gpu_id,
+                .kAray = (uint32_t)k_aray, // fei add in 20241202
+                .ccMethod = (uint32_t)cc_method,
             }, GridState {
                 .cells = cells,
                 .startX = (int32_t)start_x,
@@ -124,13 +128,21 @@ NB_MODULE(_madrona_simple_example_cpp, m) {
            nb::arg("max_episode_length"),
            nb::arg("exec_mode"),
            nb::arg("num_worlds"),
-           nb::arg("gpu_id") = -1)
+           nb::arg("gpu_id") = -1,
+           nb::arg("k_aray") = 4, // fei add in 20241202
+           nb::arg("cc_method") = 0) // fei add in 20241202 
         .def("step", &Manager::step)
         .def("reset_tensor", &Manager::resetTensor)
         .def("action_tensor", &Manager::actionTensor)
         .def("observation_tensor", &Manager::observationTensor)
         .def("reward_tensor", &Manager::rewardTensor)
         .def("done_tensor", &Manager::doneTensor)
+        .def("results_tensor", &Manager::resultsTensor)
+        .def("results2_tensor", &Manager::results2Tensor)
+        .def("madronaEvents_tensor", &Manager::madronaEventsTensor)
+        .def("madronaEventsResult_tensor", &Manager::madronaEventsResultTensor)
+        .def("simulation_time_tensor", &Manager::simulationTimeTensor)
+        .def("processParams_tensor",&Manager::processParamsTensor)
     ;
 }
 
