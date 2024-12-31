@@ -2116,10 +2116,10 @@ Sim::Sim(Engine &ctx, const Config &cfg, const WorldInit &init)
     num_npu = 0;
 
     // printf("Gen entity as following: \n");
-    generate_switch(ctx, cfg.kAray);
-    generate_in_port(ctx, cfg.kAray);
-    generate_e_port(ctx, cfg.kAray);
-    generate_host(ctx, cfg.kAray);
+    generate_switch(ctx, K_ARY);
+    generate_in_port(ctx, K_ARY);
+    generate_e_port(ctx, K_ARY);
+    generate_host(ctx, K_ARY);
 
     // printf("Gen configuration is as following: \n");
     // // printf("Total %d switches, %d in_ports, %d e_ports, %d hosts", \
