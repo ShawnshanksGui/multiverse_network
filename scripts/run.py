@@ -20,7 +20,7 @@ else:
         enable_gpu=True
 num_worlds = param1
 enable_gpu_sim =enable_gpu
-gpu_id=0
+gpu_id=3
 
 # init 
 array_shape = [5,6]
@@ -31,7 +31,9 @@ start_cell = np.array([4,5])
 end_cell = np.array([[4,5]])
 rewards[4, 0] = -1
 rewards[4, 5] = 1
-grid_world = GridWorld(num_worlds, start_cell, end_cell, rewards, walls, enable_gpu_sim, gpu_id)
+fattree_K=8
+cc_method=0
+grid_world = GridWorld(num_worlds, start_cell, end_cell, rewards, walls, enable_gpu_sim, gpu_id,fattree_K, cc_method)
 
 
 flow_events=[]
@@ -144,7 +146,11 @@ def receive_set_command():
                     break
                 # step all event
                 elif event.type==11:
+                    x=0
                     while True:
+                        x=x+1
+                        if x % 10 == 0:
+                            print(f"The {x}-th time frame:\n")
                         if len(flow_events)>0:
                             int_tensor=tensor_to_events(grid_world.madronaEvents)
                             m_events=int_array_to_madrona_events(int_tensor)

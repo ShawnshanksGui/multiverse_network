@@ -15,7 +15,7 @@ using namespace madrona::math;
 
 #define PRINT_PKT_LOG 0
 
-#define MESSAGE_BUFFER_LENGTH (1000*100)
+#define MESSAGE_BUFFER_LENGTH (100)
 
 namespace madsimple {
 

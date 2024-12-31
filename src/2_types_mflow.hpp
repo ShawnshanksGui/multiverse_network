@@ -75,7 +75,7 @@
 //Map structure size
 #define MAP_SIZE 1000
 
-#define MESSAGE_BUFFER_LENGTH (1000*100)
+#define MESSAGE_BUFFER_LENGTH (100)
 
 
 namespace madsimple {
