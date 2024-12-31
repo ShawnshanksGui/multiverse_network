@@ -9,6 +9,7 @@ import struct
 from input_helper import MadronaEvent,MadronaEvents,empty_tensor,madrona_events_to_int_array,string_to_tensor,tensor_to_string,events_to_tensor,tensor_to_events,int_array_to_madrona_events
 
 import comm
+import argparse
 
 # read python params,set num_worlds and enable_gpu
 # if(len(sys.argv)==1):
