@@ -11,16 +11,44 @@ from input_helper import MadronaEvent,MadronaEvents,empty_tensor,madrona_events_
 import comm
 
 # read python params,set num_worlds and enable_gpu
-if(len(sys.argv)==1):
-    param1=1
-    enable_gpu=False
-else:
-    param1=int(sys.argv[1])
-    if len(sys.argv) >= 3 and sys.argv[2] == '--gpu':
-        enable_gpu=True
-num_worlds = param1
-enable_gpu_sim =enable_gpu
-gpu_id=0
+# if(len(sys.argv)==1):
+#     param1=1
+#     enable_gpu=False
+# else:
+#     param1=int(sys.argv[1])
+#     if len(sys.argv) >= 3 and sys.argv[2] == '--gpu':
+#         enable_gpu=True
+# num_worlds = param1
+# enable_gpu_sim =enable_gpu
+# gpu_id=0
+
+parser = argparse.ArgumentParser(description='Process some parameters.')
+
+# 添加参数
+parser.add_argument('--num_env', type=int, required=True, help='Number of environments')
+parser.add_argument('--enable_gpu_sim', type=str, required=True, help='Enable GPU simulation (e.g., "cpu" or "gpu")')
+parser.add_argument('--fattree_K', type=int, required=True, help='Fattree K value')
+parser.add_argument('--cc_method', type=int, required=True, help='Congestion control method')
+
+# 解析参数
+args = parser.parse_args()
+
+print(f"Number of environments: {args.num_env}")
+print(f"Enable GPU simulation: {args.enable_gpu_sim}")
+print(f"Fattree K: {args.fattree_K}")
+print(f"CC Method: {args.cc_method}")
+
+
+
+num_worlds = args.num_env
+
+enable_gpu_sim = False
+if args.enable_gpu_sim == 'gpu':
+    enable_gpu_sim = True
+
+fattree_K = args.fattree_K
+cc_method = args.cc_method
+
 
 # init 
 array_shape = [5,6]
@@ -31,7 +59,9 @@ start_cell = np.array([4,5])
 end_cell = np.array([[4,5]])
 rewards[4, 0] = -1
 rewards[4, 5] = 1
-grid_world = GridWorld(num_worlds, start_cell, end_cell, rewards, walls, enable_gpu_sim, gpu_id)
+
+
+grid_world = GridWorld(num_worlds, start_cell, end_cell, rewards, walls, enable_gpu_sim, 0, fattree_K, cc_method)
 
 
 flow_events=[]

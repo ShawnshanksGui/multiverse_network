@@ -3,3 +3,8 @@ num_worlds: 1
 step_num: 10000
 step function took 5.99544 seconds to execute.
 
+finish_time: 2024-12-31 14:27:59.334972
+num_worlds: 1
+step_num: 10000
+step function took 5.49088 seconds to execute.
+
